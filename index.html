@@ -41,10 +41,10 @@
   #info.min #infoBar{border-bottom:none}
   #infoBar .ttl{font-size:11.5px;letter-spacing:.2em;color:#c3d5f5;
     text-shadow:0 1px 4px #000,0 0 2px #000}
-  #infoMin{pointer-events:auto;cursor:pointer;width:24px;height:20px;line-height:1;
+  #infoMin,#panel .secMin{pointer-events:auto;cursor:pointer;width:24px;height:20px;line-height:1;
     border:1px solid #2b4a78;border-radius:6px;background:#0d1c36aa;color:#9fc0ea;
     font:inherit;font-size:13px;padding:0;transition:.15s}
-  #infoMin:hover{border-color:#4f7dbb;color:#eaf4ff;background:#16324fcc}
+  #infoMin:hover,#panel .secMin:hover{border-color:#4f7dbb;color:#eaf4ff;background:#16324fcc}
   #infoClip{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 15px 14px;
     text-shadow:0 1px 4px #000,0 0 3px #0008}
   #info.min #infoClip{display:none}
@@ -72,7 +72,13 @@
   #panel{width:100%;text-align:right}
   #panel .sec{pointer-events:auto;background:#070c18cc;border:1px solid #1a2540;border-radius:11px;
     padding:11px 13px;margin-bottom:9px;backdrop-filter:blur(6px)}
-  #panel label{display:block;font-size:10px;letter-spacing:.12em;color:#66759a;margin-bottom:7px}
+  #panel .secBar{display:flex;align-items:center;justify-content:space-between;gap:8px;
+    cursor:pointer;user-select:none;-webkit-user-select:none}
+  #panel .secBar .ttl{font-size:10px;letter-spacing:.12em;color:#66759a}
+  #panel .sec.min .secBar .ttl{color:#93a6c9}
+  #panel .secBody{margin-top:7px}
+  #panel .sec.min{padding-top:8px;padding-bottom:8px}
+  #panel .sec.min .secBody{display:none}
   #panel input[type=range]{width:100%;accent-color:#5aa9ff;pointer-events:auto;cursor:pointer}
   #panel .ticks{display:flex;justify-content:space-between;font-size:9px;color:#5a6a8c;
     margin-top:3px;letter-spacing:.05em}
@@ -162,10 +168,18 @@
     #hud{left:12px;bottom:12px;transform:none;padding:5px 12px;gap:10px}
     #hud .spd{font-size:15px;min-width:0}
     #hud .date{font-size:10.5px}
-    #right{left:8px;right:8px;top:8px;width:auto;max-height:56vh;gap:7px}
-    #info{max-height:30vh}
+    #right{left:8px;right:8px;top:8px;width:auto;max-height:52vh;gap:6px}
+    #panel{overflow-y:auto;min-height:0}
+    #info{max-height:26vh}
     #panel .sec{padding:8px 10px;margin-bottom:6px}
-    #bodies{max-height:12vh}
+    #panel .sec.min{padding-top:6px;padding-bottom:6px;margin-bottom:6px}
+    #panel .readout{margin-top:6px;font-size:10px}
+    #panel .readout .big{font-size:16px}
+    #panel .ticks{font-size:8px}
+    #bodies{max-height:11vh;gap:4px;margin-top:7px}
+    #bodies button{font-size:10px;padding:3px 8px}
+    #acts{margin-top:7px}
+    #acts button{font-size:10px;padding:3px 9px}
     #pet{right:12px;bottom:12px;width:76px;height:76px}
     #petSay{font-size:11px;right:70px;bottom:42px}
   }
@@ -212,21 +226,27 @@
   </div>
 
   <div id="panel">
-    <div class="sec">
-      <label>时 间 速 度</label>
-      <input id="speed" type="range" min="-2" max="5" step="0.01" value="0">
-      <div class="ticks"><span>0.01×</span><span>1×</span><span>10万×</span></div>
-      <div class="readout" id="speedOut"></div>
+    <div class="sec" id="secSpeed">
+      <div class="secBar"><span class="ttl">时 间 速 度</span><button class="secMin" title="最小化 / 展开">—</button></div>
+      <div class="secBody">
+        <input id="speed" type="range" min="-2" max="5" step="0.01" value="0">
+        <div class="ticks"><span>0.01×</span><span>1×</span><span>10万×</span></div>
+        <div class="readout" id="speedOut"></div>
+      </div>
     </div>
-    <div class="sec">
-      <label>距 离 比 例（压缩 ←→ 真实 1:1）</label>
-      <input id="scale" type="range" min="0" max="1" step="0.01" value="0">
-      <div class="readout" id="scaleOut"></div>
+    <div class="sec" id="secScale">
+      <div class="secBar"><span class="ttl">距 离 比 例（压缩 ←→ 真实 1:1）</span><button class="secMin" title="最小化 / 展开">—</button></div>
+      <div class="secBody">
+        <input id="scale" type="range" min="0" max="1" step="0.01" value="0">
+        <div class="readout" id="scaleOut"></div>
+      </div>
     </div>
-    <div class="sec">
-      <label>快 速 前 往</label>
-      <select id="jump"></select>
-      <div id="bodies"></div>
+    <div class="sec" id="secJump">
+      <div class="secBar"><span class="ttl">快 速 前 往</span><button class="secMin" title="最小化 / 展开">—</button></div>
+      <div class="secBody">
+        <select id="jump"></select>
+        <div id="bodies"></div>
+      </div>
     </div>
     <div id="acts">
       <button id="btnNow">回到此刻</button>
@@ -1028,6 +1048,23 @@ $('infoMin').onclick = () => {
   const min = infoEl.classList.toggle('min');
   $('infoMin').textContent = min ? '＋' : '—';
 };
+
+/* ---- 控制面板：时间速度 / 距离比例 / 快速前往，三块都能最小化 ---- */
+document.querySelectorAll('#panel .sec').forEach(sec => {
+  const bar = sec.querySelector('.secBar'), btn = sec.querySelector('.secMin');
+  bar.addEventListener('click', () => {
+    const min = sec.classList.toggle('min');
+    btn.textContent = min ? '＋' : '—';
+  });
+});
+if (MOBILE) {                                   // 手机上默认收起两块，先把天给腾出来
+  ['secScale', 'secJump'].forEach(id => {
+    const sec = document.getElementById(id);
+    if (!sec) return;
+    sec.classList.add('min');
+    sec.querySelector('.secMin').textContent = '＋';
+  });
+}
 function liveOf(b) {
   if (!b) return null;
   if (b.sun)   return 'sun';
