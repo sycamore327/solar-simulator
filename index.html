@@ -1557,8 +1557,10 @@ if (location.protocol === 'file:') {
 
 /* ================================================================== *
  *  右下角小宠物：还是那艘像素小飞船。
- *  平时轻轻上下浮；点一下 → 蹲身蓄力、起飞原地绕一小圈、回弹落地，
- *  同时冒一句像素颜文字。隔一会儿还会自己嘟囔一句。
+ *  平时轻轻上下浮；点一下 → 从动作库里随机抽一个（空翻 / 大跳 / 摇摆 /
+ *  原地绕圈 / 连转晕圈 / 闪现 / 压扁躲猫猫 / 冲刺 …），转圈方向也随机，
+ *  同时随机冒一句像素颜文字（动作与颜文字彼此独立随机，随机配对）。
+ *  隔一会儿还会自己嘟囔一句。
  * ================================================================== */
 (() => {
   const el = document.getElementById('pet');
@@ -1580,10 +1582,107 @@ if (location.protocol === 'file:') {
   }
 
   const SAY = ['(・∀・)','(＾▽＾)','(≧▽≦)','(°∀°)b','(・ω・)','(⌒▽⌒)','(￣▽￣)','(*≧ω≦*)',
-               '(＞▽＜)','(◕‿◕)','ヾ(≧▽≦*)o','(๑•̀ㅂ•́)و','(´｡• ᵕ •｡`)','(๑˃ᴗ˂)ﻭ'];
-  const BUBBLE = [['#cfe0ff','#6d4bd6'],['#e8d9ff','#7a4bd6'],['#ffe6b0','#b07a1e'],['#c9f3d8','#2f7a55']];
+               '(＞▽＜)','(◕‿◕)','ヾ(≧▽≦*)o','(๑•̀ㅂ•́)و','(´｡• ᵕ •｡`)','(๑˃ᴗ˂)ﻭ',
+               '(๑>ᴗ<๑)','(◍•ᴗ•◍)','(＾◡＾)','(☆▽☆)','(≧∇≦)ﾉ','(＠＾◡＾)','(⌐■_■)',
+               '(・◇・)','(¬‿¬)','(„• ֊ •„)','(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧','｡◕‿◕｡','ᕕ( ᐛ )ᕗ','(っ˘ω˘ς)',
+               '(✧ω✧)','(≧◡≦)','＼(≧▽≦)／','٩(◕‿◕)۶','(ﾉ´ヮ`)ﾉ*: ･ﾟ'];
+  const BUBBLE = [['#cfe0ff','#6d4bd6'],['#e8d9ff','#7a4bd6'],['#ffe6b0','#b07a1e'],
+                  ['#c9f3d8','#2f7a55'],['#ffd7e6','#b0436d'],['#d8f0ff','#2f6ea8']];
 
-  let t0 = performance.now(), trick = 0, idleSay = t0 + 9000 + Math.random()*9000;
+  /* —— 小动作库 ——
+     每个动作给一个 0→1 的进度 q（和一个随机方向 d = ±1），
+     返回这一帧要的位移/旋转/缩放/透明度，让飞船看起来在演戏。 */
+  const env  = k => Math.sin(Math.min(1, Math.max(0, k)) * Math.PI);   // 起落包络
+  const back = k => 1 + 2.7*Math.pow(k-1,3) + 1.7*Math.pow(k-1,2);     // 回弹过冲
+
+  const ACT = {
+    spin: { dur: 1.62, f: (q, d) => {                      // 起飞原地绕圈（可顺可逆）
+      const o = { dx:0, dy:0, rot:0, sx:1, sy:1, alpha:1 };
+      if (q < 0.15) { const k = q/0.15; o.dy = 7*k; o.sy = 1-0.34*k; o.sx = 1+0.3*k; }
+      else if (q < 0.82) {
+        const r = (q-0.15)/0.67, e = env(r);
+        const ang = -Math.PI/2 + d*r*Math.PI*2*1.15;
+        o.dx = Math.cos(ang)*18*e;
+        o.dy = -16*e + Math.sin(ang)*6*e;
+        o.rot = d*r*1.15*360;
+        o.sy = 1+0.14*e; o.sx = 1-0.1*e;
+      } else { const k = (q-0.82)/0.18; o.sy = 1-0.3*Math.sin(k*Math.PI); o.sx = 1+0.26*Math.sin(k*Math.PI); }
+      return o;
+    }},
+    flip: { dur: 1.15, f: (q, d) => {                      // 跳起来空中滚一圈
+      const o = { dx:0, dy:0, rot:0, sx:1, sy:1, alpha:1 };
+      if (q < 0.12) { const k = q/0.12; o.sy = 1-0.3*k; o.sx = 1+0.26*k; return o; }
+      if (q > 0.86) { const k = (q-0.86)/0.14; o.sy = 1-0.3*Math.sin(k*Math.PI); o.sx = 1+0.26*Math.sin(k*Math.PI); return o; }
+      const r = (q-0.12)/0.74, e = env(r);
+      o.dy = -30*e; o.rot = d*r*360; o.sy = 1+0.2*e; o.sx = 1-0.16*e;
+      return o;
+    }},
+    hop: { dur: 1.0, f: (q, d) => {                        // 蹲一下蹦很高
+      const o = { dx:0, dy:0, rot:0, sx:1, sy:1, alpha:1 };
+      if (q < 0.16) { const k = q/0.16; o.dy = 8*k; o.sy = 1-0.4*k; o.sx = 1+0.34*k; return o; }
+      const r = (q-0.16)/0.84, e = env(r);
+      o.dy = -40*e; o.sy = 1+0.22*e; o.sx = 1-0.16*e; o.rot = Math.sin(r*Math.PI*2)*6*d;
+      return o;
+    }},
+    dance: { dur: 1.7, f: (q, d) => {                      // 扭腰摇摆
+      const o = { dx:0, dy:0, rot:0, sx:1, sy:1, alpha:1 };
+      const e = Math.sin(q*Math.PI), k = 0.16*e;
+      o.dx = Math.sin(q*Math.PI*4)*10*e;
+      o.dy = Math.sin(q*Math.PI*8)*4*e;
+      o.rot = Math.sin(q*Math.PI*6)*20*d*e;
+      o.sx = 1 + k*Math.sin(q*Math.PI*8);
+      o.sy = 1 - k*Math.sin(q*Math.PI*8);
+      return o;
+    }},
+    dizzy: { dur: 2.1, f: (q, d) => {                      // 连转三圈然后晕乎乎晃
+      const o = { dx:0, dy:0, rot:0, sx:1, sy:1, alpha:1 };
+      if (q < 0.5) { const r = q/0.5, e = env(r); o.rot = d*r*360*3; o.dy = -8*e; }
+      else {
+        const r = (q-0.5)/0.5;
+        o.rot = d*Math.sin(r*Math.PI*4)*30*(1-r);
+        o.dx = Math.sin(r*Math.PI*6)*4;
+        o.dy = 4*r;
+        o.sy = 1 - 0.12*Math.sin(r*Math.PI);
+        o.sx = 1 + 0.12*Math.sin(r*Math.PI);
+      }
+      return o;
+    }},
+    blink: { dur: 1.05, f: (q, d) => {                     // 缩没再闪现（左右换边）
+      const o = { dx:0, dy:0, rot:0, sx:1, sy:1, alpha:1 };
+      if (q < 0.35) { const r = q/0.35; o.sx = 1-r; o.sy = 1-r; o.alpha = 1-r; }
+      else {
+        const r = (q-0.35)/0.65, b = back(Math.min(1, r));
+        o.dx = -d*22*(1-r);
+        o.sx = 0.2 + 0.8*b; o.sy = 0.2 + 0.8*b;
+        o.alpha = Math.min(1, r*4);
+      }
+      return o;
+    }},
+    peek: { dur: 1.5, f: (q, d) => {                       // 压扁躲一下再弹回
+      const o = { dx:0, dy:0, rot:0, sx:1, sy:1, alpha:1 };
+      if (q < 0.22) { const r = q/0.22; o.sy = 1-0.68*r; o.sx = 1+0.5*r; o.dy = 10*r; }
+      else if (q < 0.75) { o.sy = 0.32; o.sx = 1.5; o.dy = 10; o.dx = Math.sin(q*40)*2; }
+      else { const r = (q-0.75)/0.25, b = back(Math.min(1, r));
+        o.sy = 0.32 + 0.68*b; o.sx = 1.5 - 0.5*b; o.dy = 10*(1-r); }
+      return o;
+    }},
+    dash: { dur: 1.5, f: (q, d) => {                       // 横向冲刺绕个扁椭圆
+      const o = { dx:0, dy:0, rot:0, sx:1, sy:1, alpha:1 };
+      if (q < 0.12) { const k = q/0.12; o.sx = 1-0.2*k; o.sy = 1+0.16*k; o.dx = -d*6*k; return o; }
+      if (q > 0.9) { const k = (q-0.9)/0.1; o.sy = 1-0.24*Math.sin(k*Math.PI); o.sx = 1+0.2*Math.sin(k*Math.PI); return o; }
+      const r = (q-0.12)/0.78, e = env(r), ang = Math.PI + d*r*Math.PI*2, s = Math.abs(Math.sin(ang));
+      o.dx = Math.cos(ang)*24*e;
+      o.dy = Math.sin(ang)*11*e - 6*e;
+      o.rot = d*10*e;
+      o.sx = 1 + 0.22*s*e; o.sy = 1 - 0.14*s*e;
+      return o;
+    }},
+  };
+  const NAMES = Object.keys(ACT);
+
+  let t0 = performance.now(), act = 0, actName = '', dir = 1;
+  let idleSay = t0 + 9000 + Math.random()*9000;
+  const trail = [];
 
   function bubble() {
     const [bg, bd] = BUBBLE[(Math.random()*BUBBLE.length)|0];
@@ -1591,11 +1690,19 @@ if (location.protocol === 'file:') {
     say.style.background = bg; say.style.borderColor = bd;
     say.classList.add('on');
     clearTimeout(say._t);
-    say._t = setTimeout(() => say.classList.remove('on'), 1700);
+    say._t = setTimeout(() => say.classList.remove('on'), 1900);
+  }
+
+  function launch() {                                     // 随机抽动作 + 随机方向 + 随机颜文字
+    actName = NAMES[(Math.random()*NAMES.length)|0];
+    dir = Math.random() < 0.5 ? -1 : 1;
+    act = performance.now();
+    trail.length = 0;
+    bubble();
   }
 
   el.addEventListener('pointerdown', e => { e.stopPropagation(); });
-  el.addEventListener('click', () => { if (!trick) { trick = performance.now(); bubble(); } });
+  el.addEventListener('click', () => { if (!act) launch(); });
 
   function flame(cx, topY, sx, f) {
     const h = 8 + 14*f;
@@ -1615,36 +1722,41 @@ if (location.protocol === 'file:') {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.clearRect(0, 0, CW, CH);
 
-    let dx = 0, dy = Math.sin(t*2.4)*3, rot = 0, sx = 1, sy = 1;
-    if (trick) {
-      const p = (now - trick) / 1000;
-      if (p < 0.24) {                                   // 蹲一下（Q 弹蓄力）
-        const k = p/0.24; dy += 7*k; sy = 1 - 0.34*k; sx = 1 + 0.3*k;
-      } else if (p < 1.32) {                            // 起飞 + 原地绕一小圈
-        const q = (p - 0.24) / 1.08;
-        const env = Math.sin(Math.min(1, q) * Math.PI); // 起落包络
-        const ang = -Math.PI/2 + q*Math.PI*2*1.15;
-        dx = Math.cos(ang) * 18 * env;
-        dy = -16*env + Math.sin(ang) * 6 * env;
-        rot = q * 1.15 * 360;
-        sy = 1 + 0.14*env; sx = 1 - 0.1*env;
-      } else if (p < 1.62) {                            // 落地回弹
-        const k = (p - 1.32)/0.3;
-        sy = 1 - 0.3*Math.sin(k*Math.PI); sx = 1 + 0.26*Math.sin(k*Math.PI);
-      } else trick = 0;
+    let dx = 0, dy = Math.sin(t*2.4)*3, rot = 0, sx = 1, sy = 1, alpha = 1;
+    if (act) {
+      const A = ACT[actName], p = (now - act) / 1000;
+      if (p >= A.dur) act = 0;                              // 演完了，回到待机
+      else {
+        const st = A.f(p / A.dur, dir);
+        dx = st.dx; dy = st.dy; rot = st.rot; sx = st.sx; sy = st.sy; alpha = st.alpha;
+      }
     }
 
     const cx = CW/2 + dx, cy = CH/2 - 2 + dy;
-    const flick = 0.5 + 0.5*Math.abs(Math.sin(t*17));
-    flame(cx, cy + UH*S*sy/2 - 3, sx, flick);
 
+    if (act) trail.push({ x:cx, y:cy, t:now });             // 演出时拖出小像素尾迹
+    while (trail.length && now - trail[0].t > 320) trail.shift();
     ctx.imageSmoothingEnabled = false;
+    for (let i = 0; i < trail.length; i++) {
+      const q = trail[i], a = (1 - (now - q.t)/320) * 0.5;
+      if (a <= 0) continue;
+      const sz = 2 + 3*(i / Math.max(1, trail.length));
+      ctx.globalAlpha = a;
+      ctx.fillStyle = i % 2 ? '#7fd7ff' : '#bda6ff';
+      ctx.fillRect(q.x - sz/2, q.y - sz/2, sz, sz);
+    }
+    ctx.globalAlpha = 1;
+
+    const flick = 0.5 + 0.5*Math.abs(Math.sin(t*17));
+    ctx.globalAlpha = alpha;
+    if (alpha > 0.02) flame(cx, cy + UH*S*sy/2 - 3, sx, flick);
     ctx.save();
     ctx.translate(cx, cy); ctx.rotate(rot*Math.PI/180); ctx.scale(sx, sy);
     ctx.drawImage(off, -UW*S/2, -UH*S/2, UW*S, UH*S);
     ctx.restore();
+    ctx.globalAlpha = 1;
 
-    if (!trick && now > idleSay) {                      // 偶尔自己嘟囔一句
+    if (!act && now > idleSay) {                            // 偶尔自己嘟囔一句
       idleSay = now + 16000 + Math.random()*14000;
       bubble();
     }
